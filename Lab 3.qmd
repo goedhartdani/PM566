@@ -1,0 +1,115 @@
+---
+title: "Lab 3"
+format: html
+editor: visual
+embed-resources: true 
+---
+
+## Lab 3
+
+**Question 1**
+
+------------------------------------------------------------------------
+
+```{r}
+met <- read.csv("~/Downloads/met_all.gz")
+```
+
+**Question 2**
+
+```{r}
+dim(met)
+head(met)
+tail(met)
+```
+
+There are 2377343 rows and 30 columns.
+
+**Question 3**
+
+```{r}
+str(met)
+```
+
+**Question 4**
+
+```{r}
+table(met$year)
+table(met$day)
+table(met$hour)
+summary(met$temp)
+summary(met$elev)
+summary(met$wind.sp)
+
+met$elev[met$elev==9999.0] <- NA
+summary(met$elev)
+
+met <- met[met$temp > -40, ]
+met <- met[order(met$temp), ]
+head(met)
+```
+
+At what elevation is the highest weather station: 4113 meters.
+
+**Question 5**
+
+The suspicious temperature value is in Colorado.
+
+```{r}
+met <- met[met$temp > -15, ]
+met <- met[order(met$temp), ]
+head(met)
+
+summary(met)
+```
+
+**Question 6**
+
+```{r}
+elev <- met[met$elev == max(met$elev,na.rm = TRUE), ]
+summary(elev)
+
+cor(elev$temp, elev$wind.sp, use="complete")
+cor(elev$temp, elev$hour, use="complete")
+cor(elev$wind.sp, elev$day, use="complete")
+cor(elev$wind.sp, elev$hour, use="complete")
+cor(elev$temp, elev$day, use="complete")
+```
+
+Weather station with maximum elevation (4113m) is USAFID 720385.
+
+Correlations: there is a moderately strong correlation between temperature and hour. All the other correlations are weak. Temperature and wind, as well as temperature and day have negative relationships.
+
+**Question 7**
+
+```{r}
+hist(met$elev, breaks=100)
+hist(met$temp)
+hist(met$wind.sp)
+```
+
+```{r}
+library(leaflet)
+leaflet(elev) %>%
+  addProviderTiles('OpenStreetMap') %>% 
+  addCircles(lat=~lat,lng=~lon, opacity=1, fillOpacity=1, radius=100)
+```
+
+```{r}
+library(lubridate)
+elev$date <- with(elev, ymd_h(paste(year, month, day, hour, sep= ' ')))
+summary(elev$date)
+elev <- elev[order(elev$date), ]
+head(elev)
+```
+
+```{r}
+plot(elev$date, elev$temp, type='l')
+plot(elev$date, elev$wind.sp, type='l')
+```
+
+One trend that is very noticeable is that the temperature rises early in the day (once the sun rises), and it drops toward the end of the day (when the sun sets). We can also see that around August 19th, the temperature was pretty high, and in the other graph we see that the wind was low on August 19th.
+
+**Question 8**
+
+I am curious why we would exclude the temperatures below -15 degrees Celsius. I understand that this is very cold, but at very high elevations this might be a reasonable temperature at night. I would love to know how we determined that those were errors rather than true values.
