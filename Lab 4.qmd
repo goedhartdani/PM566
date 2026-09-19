@@ -1,0 +1,280 @@
+---
+title: "Lab 4"
+format: html
+editor: visual
+embed-resources: true
+---
+
+## Lab 4
+
+**Question 1.**
+
+```{r}
+if (!file.exists("met_all.gz"))
+  download.file(
+    url = "https://raw.githubusercontent.com/USCbiostats/data-science-data/master/02_met/met_all.gz",
+    destfile = "met_all.gz",
+    method   = "libcurl",
+    timeout  = 60
+  )
+met <- read.csv("met_all.gz")
+```
+
+**Question 2.**
+
+```{r}
+met <- met[met$temp > -17, ]
+met$elev[met$elev==9999.0] <- NA
+met$date <- as.Date(paste(met$year, met$month, met$day, sep = "-"))
+met <- subset(met, day <=7)
+
+library(dplyr)
+met_avg <- summarize(met,
+                     temp =     mean(temp, na.rm = TRUE),
+                     rh =       mean(rh, na.rm = TRUE),
+                     wind.sp =  mean(wind.sp, na.rm = TRUE),
+                     vis.dist = mean(vis.dist, na.rm = TRUE),
+                     dew.point = mean(dew.point, na.rm = TRUE),
+                     lat =      mean(lat, na.rm = TRUE),
+                     lon =      mean(lon, na.rm = TRUE),
+                     elev =     mean(elev, na.rm = TRUE),
+                     .by = c(USAFID))
+
+met_avg$region <- NA
+met_avg$region[met_avg$lon < -98 & met_avg$lat >= 39.71 ] <- "NW"
+met_avg$region[met_avg$lon < -98 & met_avg$lat < 39.71 ] <- "SW"
+met_avg$region[met_avg$lon >= -98 & met_avg$lat >= 39.71 ] <- "NE"
+met_avg$region[met_avg$lon >= -98 & met_avg$lat < 39.71 ] <- "SE"
+
+met_avg$elev_cat <- ifelse(met_avg$elev > 252, "high", "low")
+```
+
+**Question 3.**
+
+```{r}
+library(tidyverse)
+met_avg[
+  !is.na(met_avg$dew.point) &
+    !is.na(met_avg$region),
+] %>%
+  ggplot() +
+  geom_violin(
+    mapping = aes(x = 1, y = dew.point, fill = region)
+  ) +
+  facet_wrap(~region)
+```
+
+In this graph, we are looking at the relative humidity and dew point by region. The relative humidity is on the y-axis, and the dew point on the x-axis. In the west, there are more days with less humidity than on the east coast. Dew points are about the same spread between east and west.
+
+**Question 4.**
+
+```{r}
+met_avg[
+  !is.na(met_avg$region) &
+    !is.na(met_avg$dew.point) &
+    !is.na(met_avg$rh),
+] %>%
+  ggplot() +
+  geom_point(
+    mapping = aes(
+      x = dew.point,
+      y = rh,
+      color = region
+    )
+  ) +
+  stat_smooth(
+    mapping = aes(
+      x = dew.point,
+      y = rh,
+      color = region
+    ),
+    method = "lm"
+  )
+```
+
+The relative humidity is plotted on the y-axis, and dew-point is plotted on the x-axis, with all regions in a different color. We can see that the line for the western regions is way longer, thus it has a wider range in dew point compared to the eastern regions. They also have a wider range for relative humidity.
+
+**Question 5.**
+
+```{r}
+met_avg[
+  !is.na(met_avg$elev_cat) &
+    !is.na(met_avg$region),
+] %>%
+  ggplot() +
+  geom_bar(
+    mapping = aes(x = elev_cat, fill = region),
+    position = "dodge"
+  ) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    title = "Weather Stations by Elevation Category and Region",
+    x = "Elevation Category",
+    y = "Number of Weather Stations",
+    fill = "Region"
+  )
+```
+
+This shows that the SE has a bunch of low elevation weather stations, and that the NW has very little low elevation weather stations. Across high elevations, the spread between number of weather stations for all regions is a little bit more even.
+
+**Question 6.**
+
+```{r}
+dew_plot <- met_avg[
+  !is.na(met_avg$region) &
+    !is.na(met_avg$dew.point),
+] %>%
+  ggplot() +
+  stat_summary(
+    mapping = aes(x = region, y = dew.point),
+    fun.data = "mean_sdl",
+    fun.args = list(mult = 1)
+  ) +
+  stat_summary(
+    mapping = aes(x = region, y = dew.point),
+    fun.data = "mean_sdl",
+    fun.args = list(mult = 1),
+    geom = "errorbar",
+    width = 0.2
+  ) +
+  labs(
+    title = "Mean Dew Point by Region",
+    x = "Region",
+    y = "Mean Dew Point (°C)"
+  )
+
+dew_plot
+
+wind_plot <- met_avg[
+  !is.na(met_avg$region) &
+    !is.na(met_avg$wind.sp),
+] %>%
+  ggplot() +
+  stat_summary(
+    mapping = aes(x = region, y = wind.sp),
+    fun.data = "mean_sdl",
+    fun.args = list(mult = 1)
+  ) +
+  stat_summary(
+    mapping = aes(x = region, y = wind.sp),
+    fun.data = "mean_sdl",
+    fun.args = list(mult = 1),
+    geom = "errorbar",
+    width = 0.2
+  ) +
+  labs(
+    title = "Mean Wind Speed by Region",
+    x = "Region",
+    y = "Mean Wind Speed"
+  )
+
+wind_plot
+```
+
+Mean dew point is the highest in the SE region, and has the biggest variability in NW region.
+
+Wind speed is the highest in SW region. NE and SE wind speeds are pretty similar.
+
+**Question 7**
+
+```{r}
+library(leaflet)
+
+met_avg2 <- summarize(
+  met,
+  rh  = mean(rh, na.rm = TRUE),
+  lat = mean(lat, na.rm = TRUE),
+  lon = mean(lon, na.rm = TRUE),
+  .by = USAFID
+)
+
+met_avg2 <- met_avg2[
+  !is.na(met_avg2$rh) &
+    !is.na(met_avg2$lat) &
+    !is.na(met_avg2$lon),
+]
+
+rh.pal <- colorNumeric(
+  c("goldenrod", "lightgreen", "darkgreen", "blue"),
+  domain = met_avg2$rh
+)
+
+rh.pal(50)
+
+rhmap <- leaflet(met_avg2) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  
+  addCircles(
+    lat = ~lat,
+    lng = ~lon,
+    label = ~paste0(round(rh, 2), "% RH"),
+    color = ~rh.pal(rh),
+    opacity = 1,
+    fillOpacity = 1,
+    radius = 5000
+  ) %>%
+  
+  addMarkers(
+    data = met_avg2[rank(-met_avg2$rh) <= 10, ],
+    lat = ~lat,
+    lng = ~lon,
+    label = ~paste0(
+      "Top 10 RH: ",
+      round(rh, 2),
+      "%"
+    )
+  ) %>%
+  
+  addLegend(
+    "bottomleft",
+    pal = rh.pal,
+    values = met_avg2$rh,
+    title = "Relative Humidity (%)",
+    opacity = 1
+  )
+
+rhmap
+```
+
+The overall trend among relative humidity is that it gets higher when going east.
+
+**Question 8**
+
+```{r}
+library(ggalluvial)
+
+elevation_counts <- met_avg[
+  !is.na(met_avg$region) &
+    !is.na(met_avg$elev_cat),
+] %>%
+  count(region, elev_cat)
+
+ggplot(
+  elevation_counts,
+  aes(
+    axis1 = region,
+    axis2 = elev_cat,
+    y = n
+  )
+) +
+  geom_alluvium(aes(fill = region)) +
+  geom_stratum() +
+  geom_text(
+    stat = "stratum",
+    aes(label = after_stat(stratum))
+  ) +
+  scale_x_discrete(
+    limits = c("Region", "Elevation Category"),
+    expand = c(0.1, 0.1)
+  ) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    title = "Weather Stations by Region and Elevation",
+    x = NULL,
+    y = "Number of Weather Stations",
+    fill = "Region"
+  ) +
+  theme_minimal()
+```
+
+I used the ggalluvial extension to show how the different weather stations are divided between low and high elevations. A wider flow represents a larger number of stations. This shows that the SE mostly low elevation stations, SW is pretty even between low and high. NW has more high elevation than low, and NE is pretty even between low and high.
