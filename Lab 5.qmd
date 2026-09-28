@@ -1,0 +1,235 @@
+---
+title: "Lab 5"
+format: html
+editor: visual
+embed-resources: true
+---
+
+## Lab 5
+
+**Setup**
+
+```{r}
+# Where are we getting the data from
+met_url <- "https://github.com/USCbiostats/data-science-data/raw/master/02_met/met_all.gz"
+
+# Downloading the data to a tempfile (so it is destroyed afterwards)
+# you can replace this with, for example, your own data:
+tmp <- tempfile(pattern = "met", fileext = ".gz")
+# tmp <- "met.gz"
+
+# We should be downloading this, ONLY IF this was not downloaded already.
+# otherwise is just a waste of time.
+if (!file.exists(tmp)) {
+  download.file(
+    url      = met_url,
+    destfile = tmp,
+    # method   = "libcurl", timeout = 1000 (you may need this option)
+  )
+}
+
+# Reading the data
+met <- read.csv(tmp)
+head(met)
+
+
+```
+
+```{r}
+# Download the data
+stations <- read.csv("https://noaa-isd-pds.s3.amazonaws.com/isd-history.csv")
+stations$USAF <- as.integer(stations$USAF)
+
+# Dealing with blanks and 999999
+stations$USAF[stations$USAF == 999999] <- NA
+stations$CTRY[stations$CTRY == ""] <- NA
+stations$STATE[stations$STATE == ""] <- NA
+
+# Selecting the three relevant columns, and keeping unique records
+stations <- unique(stations[, c('USAF', 'CTRY', 'STATE')])
+
+# Dropping NAs
+stations <- stations[!is.na(stations$USAF), ]
+
+# Removing duplicates
+stations <- stations[!duplicated(stations$USAF), ]
+
+# Merging Data 
+met <- merge(
+  met,
+  stations,
+  by.x = "USAFID",
+  by.y = "USAF",
+  all.x = TRUE
+)
+
+head(met)
+```
+
+**Question 1.**
+
+```{r}
+library(dplyr)
+
+# Calculate the average values for each continental US station
+station_summary <- met %>%
+  filter(
+    CTRY == "US",
+    !STATE %in% c("AK", "HI"),
+    !is.na(STATE)
+  ) %>%
+  group_by(USAFID) %>%
+  summarise(
+    STATE = first(STATE),
+    avg_temp = mean(temp, na.rm = TRUE),
+    avg_wind = mean(wind.sp, na.rm = TRUE),
+    avg_pressure = mean(atm.press, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Find the median of the station averages
+median_temp <- quantile(station_summary$avg_temp, 0.5, na.rm = TRUE)
+median_wind <- quantile(station_summary$avg_wind, 0.5, na.rm = TRUE)
+median_pressure <- quantile(station_summary$avg_pressure, 0.5, na.rm = TRUE)
+
+# Find the station closest to each median
+temp_station <- station_summary %>%
+  filter(is.finite(avg_temp)) %>%
+  slice_min(abs(avg_temp - median_temp), n = 1, with_ties = FALSE)
+
+wind_station <- station_summary %>%
+  filter(is.finite(avg_wind)) %>%
+  slice_min(abs(avg_wind - median_wind), n = 1, with_ties = FALSE)
+
+pressure_station <- station_summary %>%
+  filter(is.finite(avg_pressure)) %>%
+  slice_min(abs(avg_pressure - median_pressure), n = 1, with_ties = FALSE)
+
+# Display the answers
+temp_station
+wind_station
+pressure_station
+```
+
+The station closest to the median temperature was station 720458 in Kentucky, with an average temperature of 23.7 Celsius. The station closest to the median wind speed was 720929 in Wisconsin, with an average wind speed of 17.4 m/s. The station closest to the median pressure was station 722238 in Alabama, with an average pressure of 1015 hPa. All three stations were different.
+
+**Question 2**
+
+```{r}
+# Compute median latitude and longitude for each state
+state_medians <- met %>%
+  filter(
+    CTRY == "US",
+    !STATE %in% c("AK", "HI"),
+    !is.na(STATE)
+  ) %>%
+  distinct(USAFID, STATE, lat, lon) %>%
+  group_by(STATE) %>%
+  summarize(
+    med_lat = median(lat, na.rm = TRUE),
+    med_lon = median(lon, na.rm = TRUE)
+  )
+
+state_medians
+```
+
+**Question 3**
+
+```{r}
+# Keep one row per station
+stations_unique <- met %>%
+  filter(
+    CTRY == "US",
+    !STATE %in% c("AK", "HI"),
+    !is.na(STATE),
+    !is.na(lat),
+    !is.na(lon)
+  ) %>%
+  distinct(USAFID, STATE, lat, lon)
+
+# Find the station closest to each state's mean coordinates
+mean_stations <- stations_unique %>%
+  group_by(STATE) %>%
+  mutate(
+    mean_lat = mean(lat),
+    mean_lon = mean(lon),
+    distance = sqrt(
+      (lat - mean_lat)^2 + (lon - mean_lon)^2
+    )
+  ) %>%
+  slice_min(distance, n = 1, with_ties = FALSE) %>%
+  ungroup()
+
+mean_stations
+
+library(leaflet)
+
+leaflet() %>%
+  addTiles() %>%
+  
+  # Median coordinates from Question 2
+  addCircleMarkers(
+    data = state_medians,
+    lng = ~med_lon,
+    lat = ~med_lat,
+    color = "blue",
+    radius = 5,
+    label = ~paste(STATE, "- median coordinates")
+  ) %>%
+  
+  # Stations closest to the mean coordinates
+  addCircleMarkers(
+    data = mean_stations,
+    lng = ~lon,
+    lat = ~lat,
+    color = "red",
+    radius = 5,
+    label = ~paste(STATE, "- station", USAFID)
+  ) %>%
+  
+  addLegend(
+    position = "bottomright",
+    colors = c("blue", "red"),
+    labels = c(
+      "Median coordinates",
+      "Station closest to mean coordinates"
+    )
+  )
+```
+
+**Question 4**
+
+```{r}
+met_categories <- met %>%
+  filter(
+    CTRY == "US",
+    !STATE %in% c("AK", "HI"),
+    !is.na(STATE)
+  ) %>%
+  group_by(STATE) %>%
+  mutate(
+    state_avg_temp = mean(temp, na.rm = TRUE)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    temp_category = case_when(
+      state_avg_temp < 20 ~ "Low",
+      state_avg_temp >= 20 & state_avg_temp < 25 ~ "Mid",
+      state_avg_temp >= 25 ~ "High"
+    )
+  )
+
+state_summary <- met_categories %>%
+  group_by(temp_category) %>%
+  summarise(
+    number_states = n_distinct(STATE),
+    number_entries = n(),
+    number_NA_entries = sum(is.na(temp)),
+    number_stations = n_distinct(USAFID),
+    mean_temperature = mean(temp, na.rm = TRUE),
+    mean_wind_speed = mean(wind.sp, na.rm = TRUE),
+    mean_pressure = mean(atm.press, na.rm = TRUE)
+  )
+
+state_summary
+```
