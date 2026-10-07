@@ -1,0 +1,215 @@
+---
+title: "Lab 6"
+format: html
+editor: visual
+embed-resources: true
+---
+
+## Lab 6 - Danielle Goedhart
+
+**Setup**
+
+```{r}
+
+library(readr)
+library(dplyr)
+mt_samples <- read_csv("https://raw.githubusercontent.com/USCbiostats/data-science-data/master/00_mtsamples/mtsamples.csv")
+mt_samples <- mt_samples |>
+  select(description, medical_specialty, transcription)
+
+head(mt_samples)
+```
+
+**Question 1**
+
+```{r}
+mt_samples |>
+  count(medical_specialty, sort = TRUE)
+```
+
+The dataset contains 40 different specialties, which are not evenly distributed. For example, Surgery has 1103 counts while Hospice - Palliative Care only has 6 counts. They might be overlapping. Surgery is a very broad category, and could potentially be overlapping and related with categories like Orthopedic or Neurology.
+
+**Question 2**
+
+```{r}
+library(tidytext)
+library(ggplot2)
+
+word_counts <- mt_samples |>
+  unnest_tokens(word, transcription) |>
+  count(word, sort = TRUE)
+
+word_counts
+
+word_counts |>
+  slice_max(order_by = n, n = 20) |>
+  mutate(word = reorder(word, n)) |>
+  ggplot(aes(x = n, y = word)) +
+  geom_col(fill = "steelblue") +
+  labs(
+    title = "20 Most Frequent Words",
+    x = "Number of Times Used",
+    y = "Word"
+  ) +
+  theme_minimal()
+```
+
+When looking at the table, we can see that the word 'the' occurs 149888 times, which is the most frequent. The second most frequently used is 'and', which is used 82779 times. The table has 23647 rows, meaning that there are 23647 different words. When looking at the table, we can see how many times the 20 most frequent words are used. When looking at the table, we can see that 'the' is by far the most used, and that 'and', which is second most used, has way less counts that the first word. The following words have only a small difference between the number of times they are used: 'no,' 'she,' 'for,' 'he,' 'were,' 'on,' 'this,' 'at,' 'then,' and 'right.'
+
+**Question 3**
+
+```{r}
+word_counts_clean <- mt_samples |>
+  unnest_tokens(word, transcription) |>
+  anti_join(stop_words, by = "word") |>
+  filter(!grepl("^[0-9]+$", word)) |>
+  count(word, sort = TRUE)
+
+word_counts_clean |>
+  slice_max(order_by = n, n = 20, with_ties = FALSE) |>
+  mutate(word = reorder(word, n)) |>
+  ggplot(aes(x = n, y = word)) +
+  geom_col(fill = "steelblue") +
+  labs(
+    title = "20 Most Frequent Words After Removing Stop Words",
+    x = "Number of Times Used",
+    y = "Word"
+  ) +
+  theme_minimal()
+```
+
+After removing stop words and numbers, 'patient' is the most used word by far. This gives us a way better idea of what the text is about. Almost all words that are left, are related to the medical fields. Words like 'patient,' 'procedure,' 'anesthesia,' and 'incision' are all related to medical procedures.
+
+**Question 4**
+
+```{r}
+# Bigrams
+bigram_counts <- mt_samples |>
+  unnest_tokens(
+    bigram,
+    transcription,
+    token = "ngrams",
+    n = 2
+  ) |>
+  filter(!is.na(bigram)) |>
+  count(bigram, sort = TRUE)
+
+bigram_counts |>
+  slice_max(order_by = n, n = 20, with_ties = FALSE) |>
+  mutate(bigram = reorder(bigram, n)) |>
+  ggplot(aes(x = n, y = bigram)) +
+  geom_col(fill = "steelblue") +
+  labs(
+    title = "20 Most Frequent Bigrams",
+    x = "Number of Times Used",
+    y = "Bigram"
+  ) +
+  theme_minimal()
+
+# Trigrams
+trigram_counts <- mt_samples |>
+  unnest_tokens(
+    trigram,
+    transcription,
+    token = "ngrams",
+    n = 3
+  ) |>
+  filter(!is.na(trigram)) |>
+  count(trigram, sort = TRUE)
+
+trigram_counts |>
+  slice_max(order_by = n, n = 20, with_ties = FALSE) |>
+  mutate(trigram = reorder(trigram, n)) |>
+  ggplot(aes(x = n, y = trigram)) +
+  geom_col(fill = "darkgreen") +
+  labs(
+    title = "20 Most Frequent Trigrams",
+    x = "Number of Times Used",
+    y = "Trigram"
+  ) +
+  theme_minimal()
+```
+
+When looking at the bigrams, 'the patient' is the most common bigram, closely followed by 'of the'. A lot of the bigrams contain stop words, so it does not give us a great insight. The most common used trigram is 'the patient was', which is by far most common. After that, starting at 'there is no', the number of times the trigrams are used is pretty close to each other.
+
+**Question 5**
+
+```{r}
+bigrams_separated <- bigram_counts |>
+  tidyr::separate(
+    bigram,
+    into = c("word1", "word2"),
+    sep = " "
+  )
+
+before_patient <- bigrams_separated |>
+  filter(word2 == "patient") |>
+  arrange(desc(n))
+
+before_patient |>
+  slice_head(n = 10)
+
+after_patient <- bigrams_separated |>
+  filter(word1 == "patient") |>
+  arrange(desc(n))
+
+after_patient |>
+  slice_head(n = 10)
+```
+
+The word chosen was 'patient.' The word that occurs most frequently before the word 'patient' is 'the', with a count of 20307, which is far ahead of second most used which is 'this', only used 470 times. The word most frequently used after 'patient' is 'was' with a count of 6293 times. The second most used word after was 'is' with a count of 3332.
+
+**Question 6**
+
+```{r}
+specialty_words <- mt_samples |>
+  unnest_tokens(word, transcription) |>
+  anti_join(stop_words, by = "word") |>
+  count(medical_specialty, word) |>
+  group_by(medical_specialty) |>
+  slice_max(order_by = n, n = 5, with_ties = FALSE) |>
+  arrange(medical_specialty, desc(n))
+
+print(specialty_words, n = Inf)
+```
+
+The table displays the 5 most used word per specialty, excluding stop words.
+
+**Question 7**
+
+```{r}
+pain_by_specialty <- mt_samples |>
+  unnest_tokens(word, transcription) |>
+  group_by(medical_specialty) |>
+  summarize(
+    total_words = n(),
+    pain_count = sum(word == "pain"),
+    pain_per_1000 = pain_count / total_words * 1000
+  ) |>
+  arrange(desc(pain_per_1000))
+
+pain_by_specialty
+
+pain_by_specialty |>
+  slice_max(
+    order_by = pain_per_1000,
+    n = 10,
+    with_ties = FALSE
+  ) |>
+  mutate(
+    medical_specialty = reorder(
+      medical_specialty,
+      pain_per_1000
+    )
+  ) |>
+  ggplot(aes(x = pain_per_1000, y = medical_specialty)) +
+  geom_col(fill = "steelblue") +
+  labs(
+    title = "Use of the Word Pain by Medical Specialty",
+    x = "Uses of 'pain' per 1,000 words",
+    y = "Medical Specialty"
+  ) +
+  theme_minimal()
+```
+
+I looked at how frequently the word 'pain' was used in every specialty. When looking at the graph, 'pain' is most often used in the chiropractic. I calculated the amount of times the word was used per 1000 words, since the different specialties contain a different amount of text, so I normalized it to a 1000 words. It is secondly most used in physical medicine - rehab.
