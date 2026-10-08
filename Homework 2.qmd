@@ -66,7 +66,6 @@ flights_times <- flights_times |>
     arr_category = factor(arr_category, levels = time_levels)
   )
 
-# Departure time - bar plot
 library(ggplot2)
 ggplot(
   data = flights_times,
@@ -80,7 +79,6 @@ ggplot(
   ) +
   theme_minimal()
 
-# Arrival time - bar plot
 ggplot(
   data = flights_times,
   aes(x = arr_category)
@@ -93,7 +91,6 @@ ggplot(
   ) +
   theme_minimal()
 
-# Red eye flights classifiction & percentage
 flights_times <- flights_times |>
   mutate(
     red_eye = dep_category %in% c("afternoon", "evening") &
@@ -149,7 +146,7 @@ multiple_airline_details
 nrow(multiple_airline_details)
 ```
 
-3.  Yes there were some planes that flew for multiple airlines. There were 17 airplanes that flew for multiple airlines. The table above shows each plane's tail number, and the airlines it was flying for.
+3.  Yes there were some planes that flew for multiple airlines. There were 17 airplanes that flew for multiple airlines. The table above shows each plane's tail number, and the airlines it was flying for. The airlines that they flew for was either Endeavor Airlines and Expressjet Airlines or Delta and Airtran airways, those are the two possible combinations.
 
 **Question 4**
 
@@ -250,7 +247,7 @@ The head and tail functions show the first and last 6 rows of the dataset, respe
 
 ```{r}
 library(tidyr)
-# Distribution for departure delay
+
 ggplot(
   data = flights_weather,
   aes(x = dep_delay)
@@ -288,7 +285,6 @@ ggplot(
   ) +
   theme_minimal()
 
-# Distribtuion for weather variables
 weather_long <- flights_weather |>
   select(
     temp,
@@ -457,109 +453,172 @@ leaflet(data = airports_delays) |>
 **Question 9**
 
 ```{r}
+library(tidyverse)
+
 delay_weather <- flights_weather |>
   filter(!is.na(dep_delay))
 
-delay_weather <- delay_weather |>
-  mutate(
-    precipitation_condition = case_when(
-      is.na(precip) ~ NA_character_,
-      precip == 0 ~ "No precipitation",
-      precip <= 0.10 ~ "Light precipitation",
-      precip > 0.10 ~ "Heavy precipitation"
-    ),
-    
-    visibility_condition = case_when(
-      is.na(visib) ~ NA_character_,
-      visib < 5 ~ "Low visibility",
-      visib < 10 ~ "Reduced visibility",
-      visib >= 10 ~ "Clear visibility"
-    ),
-    
-    wind_condition = case_when(
-      is.na(wind_speed) ~ NA_character_,
-      wind_speed < 10 ~ "Low wind",
-      wind_speed < 20 ~ "Moderate wind",
-      wind_speed >= 20 ~ "Strong wind"
-    )
-  )
-
-# Precipitation
-precipitation_summary <- delay_weather |>
-  filter(!is.na(precipitation_condition)) |>
-  group_by(precipitation_condition) |>
+# Temperature 
+temperature_summary <- delay_weather |>
+  filter(!is.na(temp)) |>
+  mutate(temp_group = ntile(temp, 10)) |>
+  group_by(temp_group) |>
   summarize(
+    average_temp = mean(temp),
+    average_delay = mean(dep_delay),
     number_of_flights = n(),
-    mean_delay = mean(dep_delay),
-    median_delay = median(dep_delay),
     .groups = "drop"
   )
 
-precipitation_summary
+temperature_summary
 
 ggplot(
-  precipitation_summary,
-  aes(
-    x = precipitation_condition,
-    y = mean_delay,
-    fill = precipitation_condition
-  )
+  temperature_summary,
+  aes(x = average_temp, y = average_delay)
 ) +
-  geom_col(show.legend = FALSE) +
+  geom_line(color = "firebrick", linewidth = 1) +
+  geom_point(color = "firebrick", size = 2) +
   labs(
-    title = "Average Departure Delay by Precipitation",
-    x = "Precipitation condition",
+    title = "Average Departure Delay by Temperature",
+    x = "Average temperature (°F)",
     y = "Average departure delay (minutes)"
   ) +
   theme_minimal()
 
-# Visibility
-visibility_summary <- delay_weather |>
-  filter(!is.na(visibility_condition)) |>
-  group_by(visibility_condition) |>
+# Dewpoint
+dewpoint_summary <- delay_weather |>
+  filter(!is.na(dewp)) |>
+  mutate(dewp_group = ntile(dewp, 10)) |>
+  group_by(dewp_group) |>
   summarize(
+    average_dewp = mean(dewp),
+    average_delay = mean(dep_delay),
     number_of_flights = n(),
-    mean_delay = mean(dep_delay),
-    median_delay = median(dep_delay),
     .groups = "drop"
   )
 
-visibility_summary
+dewpoint_summary
 
 ggplot(
-  visibility_summary,
+  dewpoint_summary,
+  aes(x = average_dewp, y = average_delay)
+) +
+  geom_line(color = "darkorange", linewidth = 1) +
+  geom_point(color = "darkorange", size = 2) +
+  labs(
+    title = "Average Departure Delay by Dew Point",
+    x = "Average dew point (°F)",
+    y = "Average departure delay (minutes)"
+  ) +
+  theme_minimal()
+
+# Humidity
+humidity_summary <- delay_weather |>
+  filter(!is.na(humid)) |>
+  mutate(humidity_group = ntile(humid, 10)) |>
+  group_by(humidity_group) |>
+  summarize(
+    average_humidity = mean(humid),
+    average_delay = mean(dep_delay),
+    number_of_flights = n(),
+    .groups = "drop"
+  )
+
+humidity_summary
+
+ggplot(
+  humidity_summary,
+  aes(x = average_humidity, y = average_delay)
+) +
+  geom_line(color = "seagreen", linewidth = 1) +
+  geom_point(color = "seagreen", size = 2) +
+  labs(
+    title = "Average Departure Delay by Humidity",
+    x = "Average relative humidity",
+    y = "Average departure delay (minutes)"
+  ) +
+  theme_minimal()
+
+# Wind direction
+wind_direction_data <- delay_weather |>
+  mutate(
+    wind_direction = case_when(
+      is.na(wind_dir) ~ NA_character_,
+      wind_dir >= 337.5 | wind_dir < 22.5 ~ "N",
+      wind_dir < 67.5 ~ "NE",
+      wind_dir < 112.5 ~ "E",
+      wind_dir < 157.5 ~ "SE",
+      wind_dir < 202.5 ~ "S",
+      wind_dir < 247.5 ~ "SW",
+      wind_dir < 292.5 ~ "W",
+      wind_dir < 337.5 ~ "NW"
+    ),
+    wind_direction = factor(
+      wind_direction,
+      levels = c("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+    )
+  )
+
+wind_direction_summary <- wind_direction_data |>
+  filter(!is.na(wind_direction)) |>
+  group_by(wind_direction) |>
+  summarize(
+    average_delay = mean(dep_delay),
+    median_delay = median(dep_delay),
+    number_of_flights = n(),
+    .groups = "drop"
+  )
+
+wind_direction_summary
+
+ggplot(
+  wind_direction_summary,
   aes(
-    x = visibility_condition,
-    y = mean_delay,
-    fill = visibility_condition
+    x = wind_direction,
+    y = average_delay,
+    fill = wind_direction
   )
 ) +
   geom_col(show.legend = FALSE) +
   labs(
-    title = "Average Departure Delay by Visibility",
-    x = "Visibility condition",
+    title = "Average Departure Delay by Wind Direction",
+    x = "Wind direction",
     y = "Average departure delay (minutes)"
   ) +
   theme_minimal()
 
 # Wind speed
-wind_summary <- delay_weather |>
+wind_speed_data <- delay_weather |>
+  mutate(
+    wind_condition = case_when(
+      is.na(wind_speed) ~ NA_character_,
+      wind_speed < 10 ~ "Low wind",
+      wind_speed < 20 ~ "Moderate wind",
+      wind_speed >= 20 ~ "Strong wind"
+    ),
+    wind_condition = factor(
+      wind_condition,
+      levels = c("Low wind", "Moderate wind", "Strong wind")
+    )
+  )
+
+wind_speed_summary <- wind_speed_data |>
   filter(!is.na(wind_condition)) |>
   group_by(wind_condition) |>
   summarize(
-    number_of_flights = n(),
-    mean_delay = mean(dep_delay),
+    average_delay = mean(dep_delay),
     median_delay = median(dep_delay),
+    number_of_flights = n(),
     .groups = "drop"
   )
 
-wind_summary
+wind_speed_summary
 
 ggplot(
-  wind_summary,
+  wind_speed_summary,
   aes(
     x = wind_condition,
-    y = mean_delay,
+    y = average_delay,
     fill = wind_condition
   )
 ) +
@@ -571,7 +630,156 @@ ggplot(
   ) +
   theme_minimal()
 
-# All weather variables
+# Wind gust
+wind_gust_summary <- delay_weather |>
+  filter(!is.na(wind_gust)) |>
+  mutate(wind_gust_group = ntile(wind_gust, 10)) |>
+  group_by(wind_gust_group) |>
+  summarize(
+    average_wind_gust = mean(wind_gust),
+    average_delay = mean(dep_delay),
+    number_of_flights = n(),
+    .groups = "drop"
+  )
+
+wind_gust_summary
+
+ggplot(
+  wind_gust_summary,
+  aes(x = average_wind_gust, y = average_delay)
+) +
+  geom_line(color = "purple", linewidth = 1) +
+  geom_point(color = "purple", size = 2) +
+  labs(
+    title = "Average Departure Delay by Wind Gust",
+    x = "Average wind gust (mph)",
+    y = "Average departure delay (minutes)"
+  ) +
+  theme_minimal()
+
+# Precipitation
+precipitation_data <- delay_weather |>
+  mutate(
+    precipitation_condition = case_when(
+      is.na(precip) ~ NA_character_,
+      precip == 0 ~ "No precipitation",
+      precip <= 0.10 ~ "Light precipitation",
+      precip > 0.10 ~ "Heavy precipitation"
+    ),
+    precipitation_condition = factor(
+      precipitation_condition,
+      levels = c(
+        "No precipitation",
+        "Light precipitation",
+        "Heavy precipitation"
+      )
+    )
+  )
+
+precipitation_summary <- precipitation_data |>
+  filter(!is.na(precipitation_condition)) |>
+  group_by(precipitation_condition) |>
+  summarize(
+    average_delay = mean(dep_delay),
+    median_delay = median(dep_delay),
+    number_of_flights = n(),
+    .groups = "drop"
+  )
+
+precipitation_summary
+
+ggplot(
+  precipitation_summary,
+  aes(
+    x = precipitation_condition,
+    y = average_delay,
+    fill = precipitation_condition
+  )
+) +
+  geom_col(show.legend = FALSE) +
+  labs(
+    title = "Average Departure Delay by Precipitation",
+    x = "Precipitation condition",
+    y = "Average departure delay (minutes)"
+  ) +
+  theme_minimal()
+
+# Pressure
+pressure_summary <- delay_weather |>
+  filter(!is.na(pressure)) |>
+  mutate(pressure_group = ntile(pressure, 10)) |>
+  group_by(pressure_group) |>
+  summarize(
+    average_pressure = mean(pressure),
+    average_delay = mean(dep_delay),
+    number_of_flights = n(),
+    .groups = "drop"
+  )
+
+pressure_summary
+
+ggplot(
+  pressure_summary,
+  aes(x = average_pressure, y = average_delay)
+) +
+  geom_line(color = "navy", linewidth = 1) +
+  geom_point(color = "navy", size = 2) +
+  labs(
+    title = "Average Departure Delay by Atmospheric Pressure",
+    x = "Average atmospheric pressure (millibars)",
+    y = "Average departure delay (minutes)"
+  ) +
+  theme_minimal()
+
+# Visibility
+visibility_data <- delay_weather |>
+  mutate(
+    visibility_condition = case_when(
+      is.na(visib) ~ NA_character_,
+      visib < 5 ~ "Low visibility",
+      visib < 10 ~ "Reduced visibility",
+      visib >= 10 ~ "Clear visibility"
+    ),
+    visibility_condition = factor(
+      visibility_condition,
+      levels = c(
+        "Clear visibility",
+        "Reduced visibility",
+        "Low visibility"
+      )
+    )
+  )
+
+visibility_summary <- visibility_data |>
+  filter(!is.na(visibility_condition)) |>
+  group_by(visibility_condition) |>
+  summarize(
+    average_delay = mean(dep_delay),
+    median_delay = median(dep_delay),
+    number_of_flights = n(),
+    .groups = "drop"
+  )
+
+visibility_summary
+
+ggplot(
+  visibility_summary,
+  aes(
+    x = visibility_condition,
+    y = average_delay,
+    fill = visibility_condition
+  )
+) +
+  geom_col(show.legend = FALSE) +
+  labs(
+    title = "Average Departure Delay by Visibility",
+    x = "Visibility condition",
+    y = "Average departure delay (minutes)"
+  ) +
+  theme_minimal()
+
+
+# Correlation for weather variables without wind direction because its circular
 weather_correlations <- delay_weather |>
   summarize(
     across(
@@ -615,12 +823,24 @@ ggplot(
   theme_minimal()
 ```
 
-When looking at the plot with precipitation condition and average delay, we can see that the average delay with heavy precipitation is about 40 minutes, with light precipitation about 28 minutes, and with no precipitation about 11 minutes. Thus, with heavier precipitation, there was more delay.
+When looking at the graph 'average departure delay by temperature,' we can see how average departure delay varied across different temperatures. We can see that the average departure delay is the lowest around 47 degrees Fahrenheit. Anything colder than this has average delays around 11 minutes. At temperatures above this point, the average departure delay generally increased. There was a big spike in delay between approximately 72 and 76 degrees Fahrenheit. The highest temperature group was associated with the longest average departure delay.
 
-When looking at the plot with visibility conditions, the average departure delay with clear visibility was about 11 minutes, with low visibility about 24 minutes, and with reduced visibility about 19 minutes. When looking at this graph, we see that low visibility had the highest average delay.
+When looking at the graph including dew point, we can see that the average departure delay remained fairly consistent up to approximately 30 degrees Fahrenheit. Around 32 degrees, the average departure delay increased to almost 12 minutes. It then decreased around 39 degrees before generally increasing as the dew point rose further. The largest increase in average departure delay occurred at the highest dew point values.
 
-When looking at the plot with the wind conditions, we can see that the average departure delay with low winds was about 11 minutes, with moderate wind about 13 minutes, and with strong wind about 17 minutes. Thus, the more wind, the higher the average delay was.
+When looking at the graph including average relative humidity, we can see that average departure delay remained relatively low when average relative humidity was below approximately 60%. Above 60% humidity, average departure delay generally increased. The increase was especially large at the highest humidity levels, with the highest average relative humidity being associated with an average departure delay of approximately 25 minutes. Therefore, higher humidity was associated with longer average departure delays.
 
-The last graph plots the correlation coefficients between departure delay and each weather variable. Both visibility and pressure have a negative correlation with departure delay, meaning that if visibility or pressure increases, departure delay generally decreases. Humidity has the strongest correlation coefficient of 0.117. After that, it is dew point, precipitation, temperature, wind speed, and wind gust, in that order. These all have a positive correlation, meaning that if one of these weather variables goes up, departure delay generally increases as well. However, all of these correlation coefficients are weak.
+When looking at the graph including wind direction, we can see that South East winds were associated with the longest average departure delay at approximately 18 minutes. East and South winds were also associated with relatively long average delays of approximately 17 minutes. North West winds were associated with the shortest average delay at approximately 9 minutes. Overall, average departure delays varied depending on wind direction.
 
-After looking at all the graphs, we can conclude that precipitation had the greatest association with departure delays. Low visibility and strong winds were also associated with longer average delays. However, because all correlation coefficients were weak, weather conditions alone do not explain departure delays. There are other factors that might impact departure delay as well.
+When looking at the plot with the wind conditions, we can see that the average departure delay with low winds was about 11 minutes, with moderate wind about 13 minutes, and with strong wind about 17 minutes. Thus, stronger winds were associated with longer average departure delays.
+
+When looking at the plot with average wind gust, we can see that average departure delay fluctuates across the lower and moderate wind gust values. There is a noticeable increase in average delay between approximately 22 and 24 mph, followed by a decrease between approximately 25 and 28 mph. The strongest wind gust group, at approximately 38 mph, was associated with the longest average departure delay at approximately 19 minutes. Overall, stronger wind gusts were generally associated with longer departure delays, although this relationship was not completely consistent.
+
+When looking at the plot with precipitation condition and average delay, we can see that the average delay with heavy precipitation is approximately 41 minutes, with light precipitation approximately 29 minutes, and with no precipitation about 11 minutes. Thus, heavier precipitation was associated with longer average departure delays.
+
+When looking at the graph with atmospheric pressure, we can see that lower atmospheric pressure were associated with longer average departure delays. The two lowest pressure groups, at approximately 1005 and 1010 millibars, had average delays of about 19 minutes. As atmospheric pressure increased, the average departure delay generally decreased. The highest pressure group, at approximately 1031 millibars, was associated with the the shortest average delay of about 6 minutes.
+
+When looking at the plot with visibility conditions, the average departure delay with clear visibility was approximately 11 minutes, with low visibility approximately 25 minutes, and with reduced visibility approximately 20 minutes. This suggests that worse visibility was associated with longer average departure delays.
+
+The last graph plots the correlation coefficients between departure delay and each weather variable. Both visibility and pressure have a negative correlation with departure delay, meaning that if visibility or pressure increases, departure delay generally decreases. Humidity has the strongest correlation coefficient of 0.117. Among the variables with positive correlations, humidity was followed by dew point, precipitation, temperature, wind speed, and wind gust. Wind direction was not included in the correlation analysis because it is a circular variable.
+
+After looking at all the graphs, we can conclude that precipitation showed the largest difference in average departure delay. High humidity, high dew point, low atmospheric pressure, low visibility, and strong winds were also associated with longer average delays. Southeast winds were associated with the longest average delay among the wind directions. However, because all correlation coefficients were weak, weather conditions alone do not explain departure delays. There are other factors that might also be associated with departure delays.
