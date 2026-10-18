@@ -1,0 +1,138 @@
+---
+title: "Lab 7"
+format: html
+editor: visual
+embed-resources: true
+---
+
+## Lab 7 - Daniëlle Goedhart
+
+**Question 1**
+
+```{r}
+# Downloading the website
+website <- xml2::read_html(
+  "https://pubmed.ncbi.nlm.nih.gov/?term=sars-cov-2"
+)
+
+# Finding the count
+counts <- xml2::xml_find_first(
+  website,
+  "//div[contains(@class, 'results-amount')]//span[contains(@class, 'value')]"
+)
+
+# Turning it into text
+counts <- as.character(counts)
+
+# Extracting the number
+totalcount <- stringr::str_extract(counts, "[0-9,.]+")
+
+# Removing commas or periods
+totalcount <- gsub("[,.]", "", totalcount)
+
+# Converting it to numeric
+totalcount <- as.numeric(totalcount)
+
+print(totalcount)
+```
+
+There are 278,040 Sars-Cov-2 papers available on PudMed.
+
+**Question 2**
+
+```{r}
+# read in text, each line is a separate character
+abstracts <- readLines('~/Downloads/abstract-sars-cov-2-set.txt', warn = FALSE)
+# combine all text into one character
+abstracts <- paste(abstracts, collapse = '\n')
+# split the text whenever 3 new lines occur in a row (indicating two blank lines)
+abstracts <- unlist(strsplit(abstracts, split = '\n\n\n'))
+# replace any remaining "\n" symbols with spaces
+abstracts <- gsub("\n", " ", abstracts)
+# replace multiple spaces with single space
+abstracts <- gsub(" +", " ", abstracts)
+```
+
+**Question 3**
+
+```{r}
+library(stringr)
+
+institution <- str_extract_all(
+  abstracts,
+  "([A-Z][A-Za-z-]+\\s+){1,4}University|University of\\s+([A-Z][A-Za-z-]+\\s*){1,4}|([A-Z][A-Za-z-]+\\s+){1,4}Institute of\\s+([A-Z][A-Za-z-]+\\s*){1,4}"
+)
+
+institution <- unlist(institution)
+
+sort(table(institution), decreasing = TRUE)[1:10]
+
+top_institutions <- sort(
+  table(institution),
+  decreasing = TRUE
+)[1:10]
+
+top_institutions <- data.frame(
+  Institution = names(top_institutions),
+  Count = as.numeric(top_institutions)
+)
+
+knitr::kable(top_institutions)
+```
+
+The most common institution was "University of California' with a count of 4117. After that it was Stanford University with 1171 count, University of Southern California with 731 counts. After these 3, it was: University of California San Francisco, University of California San Diego, The University, University of Washington, Columbia University, Johns Hopkins University, and Oxford University.
+
+One limitation of this is that one institution is 'The University', which is not an actual university, but just an incomplete name. Additionally, University of California campuses were sometimes groups as "University of California', but were sometimes grouped separately. Thus, we could improve these results by using a more specific regular expression. Additional data cleaning could also improve results, by combining alternative names for the same institution. Finally, duplicate mentions of an institution within the same article could be removed before calculating the total counts.
+
+**Question 4**
+
+```{r}
+library(stringr)
+
+abstracts <- readLines(
+  "~/Downloads/abstract-sars-cov-2-set.txt",
+  warn = FALSE
+)
+
+abstracts <- paste(abstracts, collapse = "\n")
+
+abstracts <- unlist(
+  strsplit(abstracts, split = "\n\n\n")
+)
+
+journal <- str_extract(
+  abstracts,
+  "(?<=\\. ).*(?=\\n)"
+)
+
+titles <- sapply(abstracts, function(x){
+  unlist(strsplit(x, split = "\n\n"))[2]
+}, USE.NAMES = FALSE)
+
+titles <- gsub("\n", " ", titles)
+titles <- gsub(" +", " ", titles)
+
+authors <- sapply(abstracts, function(x){
+  unlist(strsplit(x, split = "\n\n"))[3]
+}, USE.NAMES = FALSE)
+
+authors <- gsub("\n", " ", authors)
+authors <- gsub(" +", " ", authors)
+
+affiliations <- str_extract(
+  abstracts,
+  "(?s)(?<=\\n\\nAuthor information:\\n).*?(?=\\n\\n)"
+)
+
+affiliations <- gsub("\n", " ", affiliations)
+affiliations <- gsub(" +", " ", affiliations)
+
+papers <- data.frame(
+  Journal = journal,
+  Title = titles,
+  Authors = authors,
+  Affiliations = affiliations
+)
+
+knitr::kable(papers[1:5, ])
+```
