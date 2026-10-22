@@ -1,0 +1,384 @@
+---
+title: "Midterm"
+format: html
+editor: visual
+embed-resources: true
+---
+
+```{r}
+#| label: setup
+#| include: false
+
+library(tidyverse)
+library(knitr)
+```
+
+## Midterm Project - Daniëlle Goedhart
+
+**Introduction**
+
+Obesity is a chronic disease that is an important public health concern in the United States of America. It is associated with an increased risk of several chronic diseases, including heart disease, diabetes, hypertension, and several types of cancer (Silveira et al., 2022). Obesity is influenced by many different factors, such as medical conditions, stress, and behaviors. One of these behaviors that can influence obesity is physical activity. Being regularly physically active can help individuals maintain a healthy weight, but also provides additional health benefits (Silveira et al., 2022). However, obesity is complex, and differences in obesity prevalence cannot be explained by physical activity alone.
+
+This project uses data from the Centers for Disease Control and Prevention's Nutrition, Physical Activity, and Obesity-Behavioral Risk Factor Surveillance System data set (Centers for Disease Control and Prevention \[CDC\], 2026). The Behavioral Risk Factor Surveillance System (BRFSS) is a health-related telephone survey system that collects information about chronic health conditions, health-related risk behaviors, healthcare access, and preventive services usage among adults in the United States. BRFSS is conducted every year, but parts of the questionnaire, including detailed physical activity questions, use a rotating core structure in which certain questions are included in alternating years (*State Health Access Data Assistance Center \[SHADAC\]*, n.d.).
+
+The purpose of this project is to examine changes in adult obesity and physical inactivity prevalence across the 50 U.S. states and Washington, D.C., from 2012 through 2022. The primary research question was: How did adult obesity and physical inactivity prevalence change across U.S. states between 2012 and 2022, and were state-level changes in physical inactivity associated with changes in obesity? It was hypothesized that locations with higher physical inactivity prevalence would generally also have higher adult obesity prevalence. However, because this analysis uses state-level observational data, the results describe an association rather than a causal relationship.
+
+**Data Preparation**
+
+```{r}
+# Import data
+cdc_raw <- read_csv(
+  "~/Downloads/Nutrition,_Physical_Activity,_and_Obesity_-_Behavioral_Risk_Factor_Surveillance_System_20261012.csv",
+  show_col_types = FALSE
+)
+
+# Clean up data
+obesity_data <- cdc_raw %>%
+  filter(
+    YearStart %in% c(2012, 2014, 2016, 2018, 2020, 2022),
+    StratificationCategory1 == "Total",
+    !LocationAbbr %in% c("US", "GU", "PR", "VI"),
+    Question ==
+      "Percent of adults aged 18 years and older who have obesity"
+  ) %>%
+  select(
+    year = YearStart,
+    state_abbr = LocationAbbr,
+    state = LocationDesc,
+    obesity_prevalence = Data_Value
+  )
+
+inactivity_data <- cdc_raw %>%
+  filter(
+    YearStart %in% c(2012, 2014, 2016, 2018, 2020, 2022),
+    StratificationCategory1 == "Total",
+    !LocationAbbr %in% c("US", "GU", "PR", "VI"),
+    Question ==
+      "Percent of adults who engage in no leisure-time physical activity"
+  ) %>%
+  select(
+    year = YearStart,
+    state_abbr = LocationAbbr,
+    state = LocationDesc,
+    inactivity_prevalence = Data_Value
+  )
+
+research_data <- obesity_data %>%
+  left_join(
+    inactivity_data,
+    by = c("year", "state_abbr", "state")
+  ) %>%
+  arrange(state, year)
+```
+
+```{r}
+#| label: missing-data-table
+
+missing_table <- research_data %>%
+  summarize(
+    `Obesity prevalence` = sum(is.na(obesity_prevalence)),
+    `Physical inactivity prevalence` = sum(is.na(inactivity_prevalence))
+  ) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "Variable",
+    values_to = "Missing observations"
+  )
+
+kable(
+  missing_table,
+  caption = "Missing values in the analytic dataset"
+)
+
+```
+
+The data were downloaded as a CSV file from the Centers for Disease Control and Prevention's Nutrition, Physical Activity, and Obesity - Behavioral Risk Factor Surveillance System data set. The original data set contained 118,580 rows and 33 columns, representing observations and variables. The variables included several health indicators, years, locations, and demographics. The data were filtered to only include every other year of data between 2012 and 2022. These alternating years were chosen because annual fluctuations in the physical inactivity estimates may be influenced by differences in the order of the BRFSS questions. The data were also limited to the 50 U.S. states and Washington, D.C. Only estimates representing the overall adult population in each state were included; estimates for specific demographic groups were excluded. Separate data sets were created for adult obesity prevalence and no leisure-time physical activity prevalence. These two were then joined together by state and year. This final data set contained 306 observations and 5 variables: year, state abbreviation, state name, adult obesity prevalence, and physical inactivity prevalence. The variables for adult obesity and physical inactivity prevalences were also checked for any missing values. No missing values were found for either measure as seen in the table above.
+
+**Exploratory Analysis**
+
+The distributions of adult obesity and physical inactivity prevalence were examined using summary statistics and box plots. The box plots display the median, interquartile range, overall spread, and any potential outliers.
+
+```{r}
+#| label: summary-statistics-table
+
+summary_table <- research_data %>%
+  filter(year %in% c(2012, 2022)) %>%
+  group_by(year) %>%
+  summarize(
+    locations = n(),
+    mean_obesity = mean(obesity_prevalence),
+    sd_obesity = sd(obesity_prevalence),
+    median_obesity = median(obesity_prevalence),
+    mean_inactivity = mean(inactivity_prevalence),
+    sd_inactivity = sd(inactivity_prevalence),
+    median_inactivity = median(inactivity_prevalence)
+  )
+
+knitr::kable(
+  summary_table,
+  digits = 1,
+  col.names = c(
+    "Year",
+    "Locations",
+    "Mean obesity",
+    "SD obesity",
+    "Median obesity",
+    "Mean inactivity",
+    "SD inactivity",
+    "Median inactivity"
+  ),
+  caption = "Summary statistics for obesity and physical inactivity prevalence in 2012 and 2022"
+)
+```
+
+This table shows the summary statistics of obesity and physical inactivity prevalence in 2012 and 2022. Both years have 51 locations, which are the 50 states and Washington, D.C. The mean obesity prevalence in 2012 was 27.9% and 33.8% in 2022, with a standard deviation of 3.4 and 4.1, respectively. The median obesity was 27.6% in 2012, and 33.6% in 2022. The mean inactivity prevalence in 2012 was 22.9%, and 23.5% in 2022. The standard deviation was 3.9 in 2012, and 3.6 in 2022. The median inactivity prevalence was 22.9% in 2012, and 23.4% in 2022.
+
+```{r}
+#| label: fig-obesity-boxplot
+#| fig-cap: "Distribution of adult obesity prevalence across the 50 states and Washington, D.C., in 2012 and 2022."
+
+ggplot(
+  data = research_data %>%
+    filter(year %in% c(2012, 2022)),
+  aes(
+    x = factor(year),
+    y = obesity_prevalence
+  )
+) +
+  geom_boxplot(fill = "steelblue") +
+  labs(
+    title = "Adult Obesity Prevalence in 2012 and 2022",
+    x = "Year",
+    y = "Adult obesity prevalence (%)"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+#| label: fig-inactivity-boxplot
+#| fig-cap: "Distribution of physical inactivity prevalence across the 50 states and Washington, D.C., in 2012 and 2022."
+
+ggplot(
+  data = research_data %>%
+    filter(year %in% c(2012, 2022)),
+  aes(
+    x = factor(year),
+    y = inactivity_prevalence
+  )
+) +
+  geom_boxplot(fill = "darkorange") +
+  labs(
+    title = "Physical Inactivity Prevalence in 2012 and 2022",
+    x = "Year",
+    y = "Physical inactivity prevalence (%)"
+  ) +
+  theme_minimal()
+```
+
+Adult obesity prevalence shifted upward between 2012 and 2022. Mean obesity prevalence increased from 27.9% to 33.8%, while median obesity prevalence increased from 27.6% to 33.6%. Physical inactivity changed much less, with its mean increasing slightly from 22.9% to 23.5%. The obesity box plots did not identify any outliers. The 2022 physical inactivity distribution contained two outliers, representing unusually low and high prevalence estimates.
+
+**Preliminary Results**
+
+```{r}
+#| label: fig-annual-trends
+#| fig-cap: "Mean adult obesity and physical inactivity prevalence across U.S. states and Washington, D.C., from 2012 through 2022."
+#| fig-width: 9
+#| fig-height: 5
+
+annual_summary <- research_data %>%
+  group_by(year) %>%
+  summarize(
+    `Adult obesity` = mean(
+      obesity_prevalence,
+      na.rm = TRUE
+    ),
+    `Physical inactivity` = mean(
+      inactivity_prevalence,
+      na.rm = TRUE
+    ),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(
+    cols = c(`Adult obesity`, `Physical inactivity`),
+    names_to = "measure",
+    values_to = "mean_prevalence"
+  )
+
+ggplot(
+  annual_summary,
+  aes(
+    x = year,
+    y = mean_prevalence,
+    color = measure
+  )
+) +
+  geom_line(linewidth = 1.1) +
+  geom_point(size = 2.5) +
+  scale_color_manual(
+    values = c(
+      "Adult obesity" = "#D55E00",
+      "Physical inactivity" = "#0072B2"
+    )
+  ) +
+  scale_x_continuous(
+    breaks = c(2012, 2014, 2016, 2018, 2020, 2022)
+  ) +
+  labs(
+    title = "Average Obesity & Physical Inactivity in the USA between 2012 and 2022",
+    x = "Year",
+    y = "Mean prevalence across locations (%)",
+    color = "Measure"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold"),
+    legend.position = "bottom",
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1
+    )
+  )
+```
+
+This line graph shows adult obesity and physical inactivity levels across all the even years between 2012 and 2022. When looking at the mean adult obesity prevalence, in orange, it is noticeable that it increased every time point. The biggest increase was between 2020 and 2022. Overall, mean adult obesity prevalence was about 5.8 percentage points higher in 2022 than it was in 2012. When looking at mean physical inactivity prevalence, the differences are not as big as with obesity prevalence. There is a small increase in mean physical inactivity prevalence between 2012 and 2018. It then decreases between 2018 and 2020, and finally increases again between 2020 and 2022.
+
+```{r}
+#| message: false
+#| label: fig-association-2022
+#| fig-cap: "Association between physical inactivity and adult obesity prevalence across the 50 states and Washington, D.C., in 2022."
+
+data_2022 <- research_data %>%
+  filter(year == 2022)
+
+correlation_2022 <- cor(
+  data_2022$inactivity_prevalence,
+  data_2022$obesity_prevalence
+)
+
+ggplot(
+  data = data_2022,
+  aes(
+    x = inactivity_prevalence,
+    y = obesity_prevalence
+  )
+) +
+  geom_point(
+    color = "steelblue",
+    size = 2.5
+  ) +
+  geom_smooth(
+    method = "lm",
+    se = FALSE,
+    color = "black"
+  ) +
+  labs(
+    title = "Physical Inactivity and Adult Obesity in 2022",
+    x = "Physical inactivity prevalence (%)",
+    y = "Adult obesity prevalence (%)"
+  ) +
+  theme_minimal()
+```
+
+This scatter plot shows that physical inactivity and adult obesity prevalence had a positive association across the 50 states and Washington, D.C. The correlation coefficient between the two variables is 0.76. The positive slope from the line of best fit indicated that locations with higher physical inactivity prevalence also had higher adult obesity prevalence. However, this association does not imply causality; it does not establish that physical inactivity caused the differences in obesity prevalence.
+
+```{r}
+#| message: false
+#| label: fig-change-association
+#| fig-cap: "Association between changes in physical inactivity and changes in adult obesity prevalence across the 50 states and Washington, D.C., from 2012 to 2022."
+
+year_2012 <- research_data %>%
+  filter(year == 2012) %>%
+  select(
+    state_abbr,
+    state,
+    obesity_2012 = obesity_prevalence,
+    inactivity_2012 = inactivity_prevalence
+  )
+
+year_2022 <- research_data %>%
+  filter(year == 2022) %>%
+  select(
+    state_abbr,
+    state,
+    obesity_2022 = obesity_prevalence,
+    inactivity_2022 = inactivity_prevalence
+  )
+
+change_data <- year_2012 %>%
+  left_join(
+    year_2022,
+    by = c("state_abbr", "state")
+  ) %>%
+  mutate(
+    obesity_change = obesity_2022 - obesity_2012,
+    inactivity_change = inactivity_2022 - inactivity_2012
+  )
+
+change_correlation <- cor(
+  change_data$inactivity_change,
+  change_data$obesity_change
+)
+
+ggplot(
+  data = change_data,
+  aes(
+    x = inactivity_change,
+    y = obesity_change
+  )
+) +
+  geom_point(
+    color = "darkorange",
+    size = 2.5
+  ) +
+  geom_smooth(
+    method = "lm",
+    se = FALSE,
+    color = "black"
+  ) +
+  labs(
+    title = "Changes in Physical Inactivity and Adult Obesity",
+    x = "Change in physical inactivity prevalence (percentage points)",
+    y = "Change in adult obesity prevalence (percentage points)"
+  ) +
+  theme_minimal()
+```
+
+This scatter plot shows the association between the change in physical inactivity prevalence and change in adult obesity prevalence between 2012 and 2022. The correlation coefficient between these two is 0.04. The individual data points are widely dispersed, and the trend line is almost flat. This indicates that states with a large increase in physical inactivity did not consistently experience larger increases in obesity. This suggests that differences in obesity trends across states cannot be explained by changes in physical inactivity alone.
+
+```{r}
+largest_changes <- change_data %>%
+  arrange(desc(obesity_change)) %>%
+  select(
+    state,
+    obesity_change,
+    inactivity_change
+  ) %>%
+  head(5)
+
+knitr::kable(
+  largest_changes,
+  digits = 1,
+  col.names = c(
+    "State",
+    "Change in obesity",
+    "Change in physical inactivity"
+  ),
+  caption = "States with the largest increases in adult obesity prevalence from 2012 to 2022"
+)
+```
+
+Delaware had the largest increase in adult obesity prevalence between 2012 and 2022, with an increase of 11.0 percentage points. Wyoming had an increase of 9.7 percentage points, South Dakota 8.7 percentage points, and Wisconsin and Ohio both 8.0 percentage points. However, the changes in physical inactivity are very minimal. Delaware did not have a change in physical inactivity at all between 2012 and 2022. Physical inactivity increased in Wyoming, South Dakota, and Wisconsin. In Ohio, physical inactivity decreased by 0.2 percentage points. These findings are consistent with the weak association observed in the scatter plot of state-level changes.
+
+**Conclusion**
+
+Adult obesity prevalence increased substantially across the 50 U.S. states and Washington, D.C., between 2012 and 2022. Mean obesity prevalence increased from 27.9% to 33.8%, while mean physical inactivity prevalence increased only slightly from 22.9% to 23.5%. In 2022, locations with higher physical inactivity prevalence generally also had higher adult obesity prevalence; the correlation coefficient is 0.76. However, the correlation between changes in physical inactivity and changes in obesity from 2012 to 2022 was only 0.04. Therefore, although obesity and physical inactivity were strongly associated across locations in 2022, changes in inactivity did not appear to explain the increases in obesity prevalence over time.
+
+There are several limitations to this project. The BRFSS data are self-reported and may be affected by reporting errors. The analysis also used state-level estimates, rather than individual data, thus results cannot determine whether physically inactive individuals were more likely to have obesity. Additionally, obesity is influenced by many other factors not included in this analysis. Overall, the results demonstrate an association between physical inactivity and obesity across locations, but they do not establish a causal relationship.
+
+**References**
+
+Centers for Disease Control and Prevention. (2026). *Nutrition, physical activity, and obesity—Behavioral Risk Factor Surveillance System* \[Data set\]. <https://data.cdc.gov/d/hn4x-zwk7>
+
+Silveira, E. A., Mendonça, C. R., Delpino, F. M., Souza, G. V. E., De Souza Rosa, L. P., De Oliveira, C., & Noll, M. (2022). Sedentary behavior, physical inactivity, abdominal obesity and obesity in adults and older adults: A systematic review and meta-analysis. *Clinical Nutrition ESPEN*, *50*, 63–73. https://doi.org/10.1016/j.clnesp.2022.06.001
+
+State Health Access Data Assistance Center. (n.d.). *Survey data season essentials: What is the BRFSS and how can researchers use it?* <https://www.shadac.org/news/what-is-the-brfss-and-how-can-researchers-use-brfss-data>
