@@ -1,0 +1,173 @@
+---
+title: "Lab 9"
+format: html
+editor: visual
+embed-resources: true
+---
+
+## Lab 9 -  Daniëlle Goedhart
+
+```{r}
+library(RSQLite)
+library(DBI)
+
+# Initialize a temporary in memory database
+con <- dbConnect(SQLite(), ":memory:")
+
+# Download tables
+actor <- read.csv("https://raw.githubusercontent.com/ivanceras/sakila/master/csv-sakila-db/actor.csv")
+rental <- read.csv("https://raw.githubusercontent.com/ivanceras/sakila/master/csv-sakila-db/rental.csv")
+customer <- read.csv("https://raw.githubusercontent.com/ivanceras/sakila/master/csv-sakila-db/customer.csv")
+payment <- read.csv("https://raw.githubusercontent.com/ivanceras/sakila/master/csv-sakila-db/payment_p2007_01.csv")
+
+# Copy data.frames to database
+dbWriteTable(con, "actor", actor)
+dbWriteTable(con, "rental", rental)
+dbWriteTable(con, "customer", customer)
+dbWriteTable(con, "payment", payment)
+```
+
+```{r}
+dbListTables(con)
+```
+
+```{sql, connection=con}
+PRAGMA table_info(actor)
+```
+
+**Exercise 1**
+
+```{sql, connection=con}
+SELECT actor_id, first_name, last_name
+FROM actor
+ORDER BY last_name, first_name;
+```
+
+**Exercise 2**
+
+```{sql, connection=con}
+SELECT actor_id, first_name, last_name
+FROM actor
+WHERE last_name IN ('WILLIAMS', 'DAVIS');
+```
+
+**Exercise 3**
+
+```{sql, connection=con}
+SELECT DISTINCT customer_id
+FROM rental
+WHERE date(rental_date) = '2005-07-05';
+```
+
+**Exercise 4.1**
+
+```{sql, connection=con}
+SELECT *
+FROM payment
+WHERE amount IN (1.99, 7.99, 9.99);
+```
+
+**Exercise 4.2**
+
+```{sql, connection=con}
+SELECT *
+FROM payment
+WHERE amount > 5;
+```
+
+**Exercise 4.3**
+
+```{sql, connection=con}
+SELECT *
+FROM payment
+WHERE amount > 5 AND amount < 8;
+```
+
+**Exercise 5**
+
+```{sql, connection=con}
+SELECT payment.payment_id, payment.amount
+FROM payment
+INNER JOIN customer
+  ON payment.customer_id = customer.customer_id
+WHERE customer.last_name = 'DAVIS';
+```
+
+**Exercise 6.1**
+
+```{sql, connection=con}
+SELECT COUNT(*) AS number_of_rentals
+FROM rental;
+```
+
+**Exercise 6.2**
+
+```{sql, connection=con}
+SELECT customer_id, COUNT(*) AS number_of_rentals
+FROM rental
+GROUP BY customer_id;
+```
+
+**Exercise 6.3**
+
+```{sql, connection=con}
+SELECT customer_id, COUNT(*) AS number_of_rentals
+FROM rental
+GROUP BY customer_id
+ORDER BY number_of_rentals DESC;
+```
+
+**Exercise 6.4**
+
+```{sql, connection=con}
+SELECT customer_id, COUNT(*) AS number_of_rentals
+FROM rental
+GROUP BY customer_id
+HAVING COUNT(*) >= 40
+ORDER BY number_of_rentals DESC;
+```
+
+**Exercise 7**
+
+```{sql, connection=con}
+SELECT
+  MAX(amount) AS maximum_amount,
+  MIN(amount) AS minimum_amount,
+  AVG(amount) AS average_amount,
+  SUM(amount) AS total_amount
+FROM payment;
+```
+
+**Exercise 7.1**
+
+```{sql, connection=con}
+SELECT
+  customer_id,
+  MAX(amount) AS maximum_amount,
+  MIN(amount) AS minimum_amount,
+  AVG(amount) AS average_amount,
+  SUM(amount) AS total_amount
+FROM payment
+GROUP BY customer_id;
+```
+
+**Exercise 7.2**
+
+```{sql, connection=con}
+SELECT
+  customer_id,
+  MAX(amount) AS maximum_amount,
+  MIN(amount) AS minimum_amount,
+  AVG(amount) AS average_amount,
+  SUM(amount) AS total_amount
+FROM payment
+GROUP BY customer_id
+HAVING COUNT(*) > 5;
+```
+
+**Cleanup**
+
+```{r}
+# clean up
+dbDisconnect(con)
+```
