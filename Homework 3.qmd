@@ -1,0 +1,242 @@
+---
+title: "Homework 3"
+format: html
+editor: visual
+embed-resources: true
+execute:
+  warning: false
+  message: false
+---
+
+## Homework 3 - Danielle Goedhart
+
+```{r}
+library(tidyverse)
+library(tidytext)
+library(ggplot2)
+library(textdata)
+```
+
+1.  **(15 points) How many abstracts are associated with each search term? Tokenize the abstracts and count the number of each token. Do you see anything interesting? What are the 5 most common tokens for each search term?**
+
+    ```{r}
+    pubmed <- read.csv("~/Downloads/pubmed.csv")
+
+    dim(pubmed)
+    names(pubmed)
+
+    abstract_counts <- pubmed %>%
+      count(term, name = "number_of_abstracts") %>%
+      arrange(desc(number_of_abstracts))
+
+    knitr::kable(abstract_counts)
+    ```
+
+The dataset contains 3,241 abstracts and two columns named "abstract" and "term." COVID had the largest number of abstracts, with 981. This was followed by prostate cancer with 787 abstracts, preeclampsia with 780 abstracts, cystic fibrosis with 376 abstracts, and meningitis with 317 abstracts.
+
+```{r}
+pubmed_words <- pubmed %>%
+  unnest_tokens(word, abstract)
+
+word_counts <- pubmed_words %>%
+  count(term, word, sort = TRUE)
+
+
+top_5_tokens <- word_counts %>%
+  group_by(term) %>%
+  slice_max(
+    order_by = n,
+    n = 5,
+    with_ties = FALSE
+  ) %>%
+  arrange(term, desc(n))
+
+knitr::kable(top_5_tokens)
+```
+
+The most common tokens were words like "the," "of," and "and." These words appeared frequently across all five search terms. However, they do not provide much information about the subjects of the abstracts. This suggests that removing stop words may make the meaningful differences between the search terms easier to identify.
+
+2.  **(15 points) Does removing stop words change what tokens appear as the most frequent? What are the 5 most common tokens for each search term after removing stop words?**
+
+    ```{r}
+    pubmed_words_no_stop <- pubmed_words %>%
+      anti_join(stop_words, by = "word")
+
+    word_counts_no_stop <- pubmed_words_no_stop %>%
+      count(term, word, sort = TRUE)
+
+    top_5_no_stop <- word_counts_no_stop %>%
+      group_by(term) %>%
+      slice_max(
+        order_by = n,
+        n = 5,
+        with_ties = FALSE
+      ) %>%
+      arrange(term, desc(n)) %>%
+      ungroup()
+
+    knitr::kable(top_5_no_stop)
+    ```
+
+Removing stop words changed the most frequent tokens. Before removing stop words, common words such as "the," "of," and "and" dominated the results. After removing them, the most frequent tokens were more specific to each medical topic. For example, COVID abstracts frequently contained "covid," "patients," "disease," and "pandemic." Prostate cancer abstracts frequently contained "cancer," "prostate," "patients," and "treatment." One interesting result is that the tokenizer separated hyphenated expressions. For example, COVID-19 got divided into "covid" and "19," while pre-eclampsia was divided into "pre" and "eclampsia." Overall, removing stop words made the results more informative and easier to interpret.
+
+3.  **(10 points) Tokenize the abstracts into bigrams. Find the 10 most common bigrams and visualize them.**
+
+    ```{r}
+    pubmed_bigrams <- pubmed %>%
+      unnest_tokens(
+        bigram,
+        abstract,
+        token = "ngrams",
+        n = 2
+      )
+
+    bigram_counts <- pubmed_bigrams %>%
+      count(bigram, sort = TRUE)
+
+    top_10_bigrams <- bigram_counts %>%
+      slice_max(
+        order_by = n,
+        n = 10,
+        with_ties = FALSE
+      )
+
+    knitr::kable(top_10_bigrams)
+
+    ggplot(
+      top_10_bigrams,
+      aes(
+        x = reorder(bigram, n),
+        y = n
+      )
+    ) +
+      geom_col(fill = "steelblue") +
+      coord_flip() +
+      labs(
+        title = "Ten Most Common Bigrams",
+        x = "Bigram",
+        y = "Count"
+      ) +
+      theme_minimal()
+    ```
+
+The most common bigram was "covid 19," appearing 6969 times. Other medically meaningful bigrams were "prostate cancer" which appeared 3222 times, "pre eclampsia" with 1854 times, among some others. Several of the most common bigrams contained stop words, such as "of the," "in the," and "and the." This shows that bigrams can still include those common stop words as they were not excluded. However, the question did not ask us to remove the stop words this time.
+
+4.  **(20 points) Calculate the TF-IDF value for each word-search term combination (here you want the search term to be the “document”). What are the 5 tokens from each search term with the highest TF-IDF value? How are the results different from the answers you got in Question 1?**
+
+```{r}
+tf_idf_words <- word_counts %>%
+  bind_tf_idf(
+    term = word,
+    document = term,
+    n = n
+  )
+
+top_5_tf_idf <- tf_idf_words %>%
+  group_by(term) %>%
+  slice_max(
+    order_by = tf_idf,
+    n = 5,
+    with_ties = FALSE
+  ) %>%
+  arrange(term, desc(tf_idf)) %>%
+  ungroup()
+
+knitr::kable(top_5_tf_idf)
+```
+
+The TF-IDF results were more specific to each medical topic when comparing it to the results from question 1. In question 1, the most frequent tokens included words like "the" and "and." Even after removing stop words, general medical words such as "patients" and "disease" appeared frequently across multiple search terms. TF-IDF gave more importance to words that were common within one search term, but less common in other groups. For example, TF-IDF results included "coronavirus," "sars," and "cov" for covid, "cftr" and "sweat" for cystic fibrosis; and "androgen," "psa," and "prostatectomy" for prostate cancer. Therefore, TF-IDF was better at identifying words that made each search term different from the others.
+
+5.  **(20 points) Perform a sentiment analysis using the NRC lexicon. What is the most common sentiment for each search term? What if you remove `"positive"` and `"negative"` from the list?**
+
+    ```{r}
+    nrc <- get_sentiments("nrc")
+    ```
+
+    ```{r}
+    nrc_counts <- pubmed_words %>%
+      inner_join(
+        nrc,
+        by = "word",
+        relationship = "many-to-many"
+      ) %>%
+      count(term, sentiment, sort = TRUE)
+
+    top_nrc_sentiment <- nrc_counts %>%
+      group_by(term) %>%
+      slice_max(
+        order_by = n,
+        n = 1,
+        with_ties = FALSE
+      ) %>%
+      ungroup()
+
+    knitr::kable(top_nrc_sentiment)
+
+    nrc_without_pos_neg <- nrc_counts %>%
+      filter(!sentiment %in% c("positive", "negative"))
+
+    top_nrc_without_pos_neg <- nrc_without_pos_neg %>%
+      group_by(term) %>%
+      slice_max(
+        order_by = n,
+        n = 1,
+        with_ties = FALSE
+      ) %>%
+      ungroup()
+
+    knitr::kable(top_nrc_without_pos_neg)
+    ```
+
+When all NRC sentiment categories were included, positive was the most common sentiment for covid, cystic fibrosis, and preeclampsia. Negative was the most common sentiment for meningitis and prostate cancer. After removing the "positive" and "negative" sentiment categories, fear was the most common sentiment for covid, disgust for cystic fibrosis, fear for meningitis, anticipation for preeclampsia, and fear for prostate cancer. These results show that the most common emotion differed across the different medical topics. However, the NRC lexicon categorizes individual words without considering their full medical context, thus, some classifications may not perfectly represent the meaning of the abstracts.
+
+6.  **(20 points) Now perform a sentiment analysis using the AFINN lexicon to get an average positivity score for each abstract (hint: you may want to create a variable that indexes, or counts, the abstracts). Create a visualization that shows these scores grouped by search term. Are any search terms noticeably different from the others?**
+
+    ```{r}
+    afinn <- get_sentiments("afinn")
+    ```
+
+```{r}
+abstract_words <- pubmed %>%
+  mutate(abstract_id = row_number()) %>%
+  unnest_tokens(word, abstract)
+
+abstract_sentiment <- abstract_words %>%
+  inner_join(afinn, by = "word") %>%
+  group_by(abstract_id, term) %>%
+  summarize(
+    average_score = mean(value),
+    .groups = "drop"
+  )
+
+ggplot(
+  abstract_sentiment,
+  aes(x = term, y = average_score, fill = term)
+) +
+  geom_boxplot(show.legend = FALSE) +
+  labs(
+    title = "Average AFINN Sentiment Score by Search Term",
+    x = "Search Term",
+    y = "Average AFINN Score"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1
+    )
+  )
+
+term_sentiment_summary <- abstract_sentiment %>%
+  group_by(term) %>%
+  summarize(
+    mean_score = mean(average_score),
+    median_score = median(average_score),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(mean_score))
+
+knitr::kable(term_sentiment_summary)
+```
+
+Cystic fibrosis was different from the other search terms. It had the highest mean AFINN score of 0.32 and was the only group with a positive mean and median score. The other 4 search terms had slightly negative average scores. Prostate cancer had the lowest mean score at -0.24, then meningitis, COVID, and preeclampsia, in that order. Although the distributions overlapped, the cystic fibrosis abstracts generally had a more positive sentiment than the other groups, while prostate cancer abstracts were generally the most negative.
