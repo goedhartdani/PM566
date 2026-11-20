@@ -1,0 +1,268 @@
+---
+title: "Homework 4"
+format: html
+editor: visual
+embed-resources: true
+---
+
+## Homework 4 - Danielle Goedhart
+
+```{r}
+library(microbenchmark)
+library(ggplot2)
+library(parallel)
+library(RSQLite)
+library(DBI)
+```
+
+**Question 1**
+
+```{r}
+# Question 1
+
+# Total for each row
+fun1 <- function(mat) {
+  n <- nrow(mat)
+  ans <- double(n) 
+  for (i in 1:n) {
+    ans[i] <- sum(mat[i, ])
+  }
+  ans
+}
+
+fun1alt <- function(mat) {
+  rowSums(mat)
+}
+
+# Use the functions with this data
+set.seed(2315)
+dat <- matrix(rnorm(200 * 100), nrow = 200)
+
+all.equal(fun1(dat), fun1alt(dat))
+
+benchmark1 <- microbenchmark(
+  Original = fun1(dat),
+  Faster = fun1alt(dat),
+  times = 100L
+)
+
+benchmark1
+
+autoplot(benchmark1) +
+  labs(
+    title = "Runtime Comparison for Row Totals",
+    x = "Function"
+  )
+```
+
+Both functions returned the same output, as confirmed by the 'TRUE'. The median runtime in the original code was 725 microseconds, and 107 microseconds in the faster code. The plot also shows that the new function is generally faster than the original function.
+
+**Question 2**
+
+```{r}
+# running cumulative sum by row
+fun2 <- function(mat) {
+  n <- nrow(mat)
+  k <- ncol(mat)
+  ans <- mat
+  for (i in 1:n) {
+    for (j in 2:k) {
+      ans[i,j] <- mat[i, j] + ans[i, j - 1]
+    }
+  }
+  ans
+}
+
+fun2alt <- function(mat) {
+  t(apply(mat, 1, cumsum))
+}
+
+all.equal(fun2(dat), fun2alt(dat))
+
+dim(dat)
+dim(fun2alt(dat))
+
+benchmark2 <- microbenchmark(
+  Original = fun2(dat),
+  Faster = fun2alt(dat),
+  times = 100L
+)
+
+benchmark2
+
+autoplot(benchmark2) +
+  labs(
+    title = "Runtime Comparison for Row Cumulative Totals",
+    x = "Function"
+  )
+```
+
+Both of the functions returned the same output, which is confirmed by all.equal() returning 'TRUE'. The output retained the original dimensions of 200 rows, and 100 columns. The median runtime was reduced from 3686 microseconds to 1758 microseconds, making it about 2x faster. The plot also shows generally faster runtimes for the new function. However, in the plot we can also see an unusually slow run.
+
+**Question 3**
+
+```{r}
+# Question 3
+
+sim_pi <- function(n = 1000, i = NULL) {
+  p <- matrix(runif(n*2), ncol = 2)
+  mean(rowSums(p^2) < 1) * 4
+}
+
+# Here is an example of the run
+set.seed(156)
+sim_pi(1000) # 3.132
+
+# This runs the simulation a 4,000 times, each with 10,000 points
+set.seed(1231)
+time_sequential <- system.time({
+  ans_sequential <- unlist(lapply(1:4000, sim_pi, n = 10000))
+  print(mean(ans_sequential))
+})
+
+time_sequential
+
+available_cores <- detectCores()
+if (is.na(available_cores)) available_cores <- 2L
+n_workers <- max(1L, min(4L, available_cores - 1L))
+
+cl <- makeCluster(n_workers)
+
+clusterSetRNGStream(cl, iseed = 1231)
+
+time_parallel <- system.time({
+  ans_parallel <- unlist(
+    parLapply(cl, 1:4000, sim_pi, n = 10000)
+  )
+  print(mean(ans_parallel))
+})
+
+stopCluster(cl)
+
+time_parallel
+
+estimate_summary <- data.frame(
+  Method = c("Sequential", "Parallel"),
+  Minimum = c(min(ans_sequential), min(ans_parallel)),
+  Mean = c(mean(ans_sequential), mean(ans_parallel)),
+  Maximum = c(max(ans_sequential), max(ans_parallel))
+)
+
+estimate_summary
+
+estimates <- data.frame(
+  Method = rep(c("Sequential", "Parallel"), each = 4000),
+  Estimate = c(ans_sequential, ans_parallel)
+)
+
+ggplot(estimates, aes(x = Method, y = Estimate, fill = Method)) +
+  geom_boxplot() +
+  geom_hline(yintercept = pi, linetype = "dashed", color = "red") +
+  labs(
+    title = "Comparison of Simulated Estimates of Pi",
+    x = "Method",
+    y = "Estimated Pi"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+runtimes <- data.frame(
+  Method = c("Sequential", "Parallel"),
+  Seconds = c(
+    unname(time_sequential["elapsed"]),
+    unname(time_parallel["elapsed"])
+  )
+)
+
+runtimes
+
+ggplot(runtimes, aes(x = Method, y = Seconds, fill = Method)) +
+  geom_col(width = 0.6) +
+  labs(
+    title = "Sequential and Parallel Simulation Runtimes",
+    x = "Method",
+    y = "Elapsed Time (seconds)"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+Both produced similar estimates of pie. The sequential mean was 3.141240 and the parallel mean was 3.141578. The ranges for both methods were also very similar; 3.0838 to 3.1960 for the sequential method, and 3.0820 to 3.1964 for the parallel method. When looking at the boxplots, we see similar centers, as well as similar spreads. The sequential method has a elapsed runtime of 8.354 seconds, while the parallel method had an elapsed runtime of 3.249 seconds. Thus, the parallel method is about 2.5 times faster than the sequential method. These times exclude parallel worker setup and shutdown.
+
+**SQL**
+
+```{r}
+library(RSQLite)
+library(DBI)
+
+# Initialize a temporary in memory database
+con <- dbConnect(SQLite(), ":memory:")
+
+# Download tables
+film <- read.csv("https://raw.githubusercontent.com/ivanceras/sakila/master/csv-sakila-db/film.csv")
+film_category <- read.csv("https://raw.githubusercontent.com/ivanceras/sakila/master/csv-sakila-db/film_category.csv")
+category <- read.csv("https://raw.githubusercontent.com/ivanceras/sakila/master/csv-sakila-db/category.csv")
+
+# Copy data.frames to database
+dbWriteTable(con, "film", film)
+dbWriteTable(con, "film_category", film_category)
+dbWriteTable(con, "category", category)
+```
+
+**Question 4**
+
+```{sql, connection=con}
+SELECT rating, COUNT(*) AS number_of_movies
+FROM film
+GROUP BY rating
+ORDER BY rating;
+```
+
+There are 180 movies in rating G, 210 movies in rating NC-17, 194 movies in rating PG, 223 movies in rating PG-13, and 195 movies in rating R.
+
+**Question 5**
+
+```{sql, connection=con}
+SELECT
+  rating,
+  AVG(replacement_cost) AS average_replacement_cost,
+  AVG(rental_rate) AS average_rental_rate
+FROM film
+GROUP BY rating
+ORDER BY rating;
+```
+
+The average replacement cost for rating G is 20.123, and the average rental rate is 2.91. For rating NC-17, the average replacement cost is 20.127, and the average rental rate is 2.971. The average replacement cost for rating PG is 18.959, and the average rental rate is 3.052. For rating PG-13, the average replacement cost is 20.403, and the average rental rate is 3.035. For rating R, the average replacement cost is 20.231, and the average rental rate is 2.939.
+
+**Question 6**
+
+```{sql, connection=con}
+SELECT
+  film_category.category_id,
+  COUNT(*) AS number_of_films
+FROM film
+INNER JOIN film_category
+  ON film.film_id = film_category.film_id
+GROUP BY film_category.category_id
+ORDER BY film_category.category_id;
+```
+
+There are 64 films associated with category ID 1, 66 with category ID 2, 60 with category ID 4, 57 with category ID 5. There are 58 films associated with category ID 6, 68 films associated with category ID 6, 62 with category ID 7, 69 with ID 8, 73 with ID 9, and 61 films associated with category ID 10.
+
+**Question 7**
+
+```{sql, connection=con}
+SELECT
+  category.name AS category_name,
+  COUNT(*) AS number_of_films
+FROM film
+INNER JOIN film_category
+  ON film.film_id = film_category.film_id
+INNER JOIN category
+  ON film_category.category_id = category.category_id
+GROUP BY category.category_id, category.name
+ORDER BY number_of_films DESC
+LIMIT 1;
+```
+
+The name of the most popular category is "Sports," with 74 films.
